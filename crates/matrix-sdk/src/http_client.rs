@@ -137,27 +137,22 @@ impl HttpClient {
         config: RequestConfig,
     ) -> Result<http::Request<Bytes>, HttpError> {
         let read_guard;
-        let access_token = if config.force_auth {
-            read_guard = session.read().await;
-            if let Some(session) = read_guard.as_ref() {
-                SendAccessToken::Always(session.access_token.as_str())
-            } else {
-                return Err(HttpError::ForcedAuthenticationWithoutAccessToken);
-            }
-        } else {
-            match Request::METADATA.authentication {
-                AuthScheme::AccessToken => {
-                    read_guard = session.read().await;
+        let access_token = match Request::METADATA.authentication {
+            AuthScheme::AccessToken => {
+                read_guard = session.read().await;
 
-                    if let Some(session) = read_guard.as_ref() {
-                        SendAccessToken::IfRequired(session.access_token.as_str())
+                if let Some(session) = read_guard.as_ref() {
+                    if config.force_auth {
+                        SendAccessToken::Always(session.access_token.as_str())
                     } else {
-                        return Err(HttpError::AuthenticationRequired);
+                        SendAccessToken::IfRequired(session.access_token.as_str())
                     }
+                } else {
+                    return Err(HttpError::AuthenticationRequired);
                 }
-                AuthScheme::None => SendAccessToken::None,
-                _ => return Err(HttpError::NotClientRequest),
             }
+            AuthScheme::None => SendAccessToken::None,
+            _ => return Err(HttpError::NotClientRequest),
         };
 
         let http_request = request
